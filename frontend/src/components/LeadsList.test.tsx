@@ -24,7 +24,8 @@ vi.mock('./CsvImportModal', () => ({
 }))
 
 vi.mock('./MessageTemplateModal', () => ({
-  MessageTemplateModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div>message-template-modal</div> : null),
+  MessageTemplateModal: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div>message-template-modal</div> : null,
 }))
 
 const baseLead = {
@@ -66,8 +67,22 @@ describe('LeadsList', () => {
   it('renders lead rows with their fields and email verification status', async () => {
     vi.mocked(api.leads.getMany).mockResolvedValue([
       { ...baseLead, id: 1, emailVerified: null },
-      { ...baseLead, id: 2, firstName: 'Jane', lastName: 'Roe', email: 'jane@example.com', emailVerified: true },
-      { ...baseLead, id: 3, firstName: 'Bob', lastName: 'Fox', email: 'bob@example.com', emailVerified: false },
+      {
+        ...baseLead,
+        id: 2,
+        firstName: 'Jane',
+        lastName: 'Roe',
+        email: 'jane@example.com',
+        emailVerified: true,
+      },
+      {
+        ...baseLead,
+        id: 3,
+        firstName: 'Bob',
+        lastName: 'Fox',
+        email: 'bob@example.com',
+        emailVerified: false,
+      },
     ])
 
     renderWithQueryClient(<LeadsList />)

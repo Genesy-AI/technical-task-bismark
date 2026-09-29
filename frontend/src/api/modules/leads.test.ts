@@ -17,7 +17,9 @@ describe('leadsApi', () => {
     expect(leadsApi.create).toBeDefined()
 
     const resolvedPath = (method: string, path: string) =>
-      endpointCalls.some(([m, p]) => m === method && (typeof p === 'function' ? p({ id: 1 }) === path : p === path))
+      endpointCalls.some(
+        ([m, p]) => m === method && (typeof p === 'function' ? p({ id: 1 }) === path : p === path)
+      )
 
     expect(endpointCalls).toContainEqual(['get', '/leads'])
     expect(endpointCalls).toContainEqual(['post', '/leads'])
