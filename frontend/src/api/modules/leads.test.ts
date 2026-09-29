@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 
-const endpointCalls: Array<[string, string | ((q: any) => string)]> = []
+const endpointCalls: Array<[string, string | ((q: { id: number }) => string)]> = []
 
 vi.mock('../utils', () => ({
-  endpoint: (method: string, pathOrBuilder: string | ((q: any) => string)) => {
+  endpoint: (method: string, pathOrBuilder: string | ((q: { id: number }) => string)) => {
     endpointCalls.push([method, pathOrBuilder])
     return vi.fn()
   },

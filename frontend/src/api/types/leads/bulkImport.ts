@@ -15,6 +15,7 @@ export interface LeadsBulkImportOutput {
   duplicatesSkipped: number
   invalidLeads: number
   errors: Array<{
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- lead payload shape varies per row
     lead: any
     error: string
   }>

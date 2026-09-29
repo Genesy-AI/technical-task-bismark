@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- generic mutation-options plumbing needs any for type erasure */
 import {
   DefaultError,
   QueryClient,
