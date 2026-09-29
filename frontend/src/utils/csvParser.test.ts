@@ -154,6 +154,15 @@ John,Doe,john@example.com,,`
     expect(result[0].isValid).toBe(true)
   })
 
+  it('should treat a blank companyName as absent', () => {
+    const csv = `firstName,lastName,email,companyName
+John,Doe,john@example.com,`
+
+    const result = parseCsv(csv)
+
+    expect(result[0].companyName).toBeUndefined()
+  })
+
   it('should preserve row index correctly', () => {
     const csv = `firstName,lastName,email
 John,Doe,john@example.com
