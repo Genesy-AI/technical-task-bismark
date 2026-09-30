@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express'
 import { Connection, Client } from '@temporalio/client'
 import { verifyEmailWorkflow } from './workflows'
 import { generateMessageFromTemplate } from './utils/messageGenerator'
+import { isValidCountryCode } from './utils/countryCode'
 import { runTemporalWorker } from './worker'
 
 // Overridable so integration tests can point at an isolated SQLite file instead of prisma/dev.db.
@@ -226,8 +227,23 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
 
     let importedCount = 0
     const errors: Array<{ lead: any; error: string }> = []
+    const warnings: Array<{ lead: any; warning: string }> = []
 
     for (const lead of uniqueLeads) {
+      const trimmedCountryCode = lead.countryCode ? String(lead.countryCode).trim() : ''
+      let countryCode: string | null = null
+
+      if (trimmedCountryCode) {
+        if (isValidCountryCode(trimmedCountryCode)) {
+          countryCode = trimmedCountryCode.toUpperCase()
+        } else {
+          warnings.push({
+            lead,
+            warning: `Invalid country code "${trimmedCountryCode}" (expected a 2-letter code) — cleared`,
+          })
+        }
+      }
+
       try {
         await prisma.lead.create({
           data: {
@@ -235,7 +251,7 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
             lastName: lead.lastName.trim(),
             email: lead.email.trim(),
             jobTitle: lead.jobTitle ? lead.jobTitle.trim() : null,
-            countryCode: lead.countryCode ? lead.countryCode.trim() : null,
+            countryCode,
             companyName: lead.companyName ? lead.companyName.trim() : null,
           },
         })
@@ -256,6 +272,7 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
       duplicatesSkipped: validLeads.length - uniqueLeads.length,
       invalidLeads: leads.length - validLeads.length,
       errors,
+      warnings,
     })
     /* v8 ignore start -- generic DB-failure fallback, not reachable without mocking Prisma internals */
   } catch (error) {

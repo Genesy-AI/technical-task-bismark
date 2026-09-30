@@ -75,6 +75,7 @@ describe('CsvImportModal', () => {
       duplicatesSkipped: 0,
       invalidLeads: 0,
       errors: [],
+      warnings: [],
     })
 
     renderWithQueryClient(<CsvImportModal isOpen={true} onClose={onClose} />)
@@ -110,6 +111,7 @@ describe('CsvImportModal', () => {
       duplicatesSkipped: 2,
       invalidLeads: 3,
       errors: [],
+      warnings: [],
     })
 
     renderWithQueryClient(<CsvImportModal isOpen={true} onClose={vi.fn()} />)
@@ -122,6 +124,38 @@ describe('CsvImportModal', () => {
         'Successfully imported 1 leads! (2 duplicates skipped) (3 invalid leads excluded)'
       )
     })
+  })
+
+  it('includes a warnings count in the success message when a countryCode was cleared', async () => {
+    vi.mocked(api.leads.bulkImport).mockResolvedValue({
+      success: true,
+      importedCount: 1,
+      duplicatesSkipped: 0,
+      invalidLeads: 0,
+      errors: [],
+      warnings: [{ lead: {}, warning: 'Invalid country code "XXX" (expected a 2-letter code) — cleared' }],
+    })
+
+    renderWithQueryClient(<CsvImportModal isOpen={true} onClose={vi.fn()} />)
+    await selectFile(makeFile(validCsv))
+    await screen.findByText('Import Summary')
+    fireEvent.click(screen.getByText('Import 1 Valid Leads'))
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        'Successfully imported 1 leads! (1 with an invalid country code cleared)'
+      )
+    })
+  })
+
+  it('shows a per-row warning for an invalid countryCode without marking the row invalid', async () => {
+    renderWithQueryClient(<CsvImportModal isOpen={true} onClose={vi.fn()} />)
+
+    await selectFile(makeFile('firstName,lastName,email,countryCode\nJohn,Doe,john@example.com,XXX'))
+    await screen.findByText('Import Summary')
+
+    expect(screen.getByText('Import 1 Valid Leads')).toBeInTheDocument()
+    expect(screen.getByText(/Invalid country code "XXX"/)).toBeInTheDocument()
   })
 
   it('shows an error toast when the import request fails', async () => {

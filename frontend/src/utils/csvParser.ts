@@ -9,12 +9,17 @@ export interface CsvLead {
   companyName?: string
   isValid: boolean
   errors: string[]
+  warnings: string[]
   rowIndex: number
 }
 
 export const isValidEmail = (email: string): boolean => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   return emailRegex.test(email)
+}
+
+export const isValidCountryCode = (countryCode: string): boolean => {
+  return /^[A-Za-z]{2}$/.test(countryCode)
 }
 
 export const parseCsv = (content: string): CsvLead[] => {
@@ -89,6 +94,14 @@ export const parseCsv = (content: string): CsvLead[] => {
       errors.push('Invalid email format')
     }
 
+    const warnings: string[] = []
+    if (lead.countryCode && !isValidCountryCode(lead.countryCode)) {
+      warnings.push(`Invalid country code "${lead.countryCode}" (expected a 2-letter code) — cleared`)
+      lead.countryCode = undefined
+    } else if (lead.countryCode) {
+      lead.countryCode = lead.countryCode.toUpperCase()
+    }
+
     data.push({
       ...lead,
       firstName: lead.firstName || '',
@@ -96,6 +109,7 @@ export const parseCsv = (content: string): CsvLead[] => {
       email: lead.email || '',
       isValid: errors.length === 0,
       errors,
+      warnings,
     } as CsvLead)
   })
 

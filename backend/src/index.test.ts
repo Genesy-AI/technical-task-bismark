@@ -249,7 +249,7 @@ describe('POST /leads/bulk', () => {
     expect(res.body).toMatchObject({ success: true, importedCount: 1, duplicatesSkipped: 1, invalidLeads: 1 })
   })
 
-  it('currently stores any countryCode value as-is, without validating it (baseline for bug 1)', async () => {
+  it('clears an invalid countryCode, still imports the lead, and reports a warning instead of failing it', async () => {
     const res = await request(app)
       .post('/leads/bulk')
       .send({
@@ -258,8 +258,40 @@ describe('POST /leads/bulk', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.importedCount).toBe(1)
+    expect(res.body.warnings).toEqual([
+      {
+        lead: { firstName: 'Bad', lastName: 'Code', email: 'bad@example.com', countryCode: 'XXX' },
+        warning: 'Invalid country code "XXX" (expected a 2-letter code) — cleared',
+      },
+    ])
     const created = await prisma.lead.findFirst({ where: { email: 'bad@example.com' } })
-    expect(created?.countryCode).toBe('XXX')
+    expect(created?.countryCode).toBeNull()
+  })
+
+  it('accepts a numeric-looking-but-wrong-length countryCode and clears it too', async () => {
+    const res = await request(app)
+      .post('/leads/bulk')
+      .send({
+        leads: [{ firstName: 'Numeric', lastName: 'Code', email: 'numeric@example.com', countryCode: '12' }],
+      })
+
+    expect(res.status).toBe(200)
+    expect(res.body.warnings).toHaveLength(1)
+    const created = await prisma.lead.findFirst({ where: { email: 'numeric@example.com' } })
+    expect(created?.countryCode).toBeNull()
+  })
+
+  it('normalizes a valid countryCode to uppercase and reports no warning', async () => {
+    const res = await request(app)
+      .post('/leads/bulk')
+      .send({
+        leads: [{ firstName: 'Good', lastName: 'Code', email: 'good@example.com', countryCode: 'us' }],
+      })
+
+    expect(res.status).toBe(200)
+    expect(res.body.warnings).toEqual([])
+    const created = await prisma.lead.findFirst({ where: { email: 'good@example.com' } })
+    expect(created?.countryCode).toBe('US')
   })
 })
 
