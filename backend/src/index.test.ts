@@ -1,0 +1,315 @@
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest'
+import type { Express } from 'express'
+import request from 'supertest'
+import { PrismaClient } from '@prisma/client'
+import { TEST_DATABASE_URL } from './test/globalSetup'
+
+const workflowExecuteMock = vi.fn()
+const connectionCloseMock = vi.fn()
+
+// index.ts talks to a real Temporal server for /leads/verify-emails; no Temporal server
+// runs in this test suite, so we mock the client to control what each workflow "returns".
+vi.mock('@temporalio/client', () => ({
+  Connection: { connect: vi.fn().mockResolvedValue({ close: connectionCloseMock }) },
+  Client: vi.fn().mockImplementation(() => ({ workflow: { execute: workflowExecuteMock } })),
+}))
+
+let app: Express
+
+// Dynamic import (not a top-level await) so tsc -p . can still compile this file with
+// module: commonjs, and so the @temporalio/client mock above is registered before index.ts loads it.
+beforeAll(async () => {
+  ;({ app } = await import('./index'))
+})
+
+const prisma = new PrismaClient({ datasourceUrl: TEST_DATABASE_URL })
+
+async function createLead(overrides: Partial<Record<string, unknown>> = {}) {
+  return prisma.lead.create({
+    data: {
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john@example.com',
+      ...overrides,
+    },
+  })
+}
+
+beforeEach(async () => {
+  vi.clearAllMocks()
+  await prisma.lead.deleteMany({})
+})
+
+afterAll(async () => {
+  await prisma.$disconnect()
+})
+
+describe('CORS preflight', () => {
+  it('short-circuits OPTIONS requests with a 200 and no body', async () => {
+    const res = await request(app).options('/leads')
+
+    expect(res.status).toBe(200)
+    expect(res.headers['access-control-allow-origin']).toBe('*')
+  })
+})
+
+describe('POST /leads', () => {
+  it('creates a lead from name/lastName/email', async () => {
+    const res = await request(app)
+      .post('/leads')
+      .send({ name: 'Jane', lastName: 'Roe', email: 'jane@example.com' })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ firstName: 'Jane', lastName: 'Roe', email: 'jane@example.com' })
+  })
+
+  it('rejects a request missing required fields', async () => {
+    const res = await request(app).post('/leads').send({ name: 'Jane' })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/required/i)
+  })
+})
+
+describe('GET /leads/:id', () => {
+  it('returns the lead when it exists', async () => {
+    const lead = await createLead()
+
+    const res = await request(app).get(`/leads/${lead.id}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ id: lead.id, firstName: 'John' })
+  })
+
+  it('returns null when the lead does not exist', async () => {
+    const res = await request(app).get('/leads/999999')
+
+    expect(res.status).toBe(200)
+    expect(res.body).toBeNull()
+  })
+})
+
+describe('GET /leads', () => {
+  it('lists all leads', async () => {
+    await createLead({ email: 'a@example.com' })
+    await createLead({ email: 'b@example.com' })
+
+    const res = await request(app).get('/leads')
+
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveLength(2)
+  })
+})
+
+describe('PATCH /leads/:id', () => {
+  it('updates name/email', async () => {
+    const lead = await createLead()
+
+    const res = await request(app)
+      .patch(`/leads/${lead.id}`)
+      .send({ name: 'Johnny', email: 'johnny@example.com' })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ firstName: 'Johnny', email: 'johnny@example.com' })
+  })
+})
+
+describe('DELETE /leads/:id', () => {
+  it('deletes a single lead', async () => {
+    const lead = await createLead()
+
+    const res = await request(app).delete(`/leads/${lead.id}`)
+
+    expect(res.status).toBe(200)
+    await expect(prisma.lead.findUnique({ where: { id: lead.id } })).resolves.toBeNull()
+  })
+})
+
+describe('DELETE /leads', () => {
+  it('rejects a request with no JSON body', async () => {
+    const res = await request(app).delete('/leads')
+
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects a missing/invalid ids array', async () => {
+    const res = await request(app).delete('/leads').send({})
+
+    expect(res.status).toBe(400)
+  })
+
+  it('bulk deletes leads by id', async () => {
+    const a = await createLead({ email: 'a@example.com' })
+    const b = await createLead({ email: 'b@example.com' })
+
+    const res = await request(app)
+      .delete('/leads')
+      .send({ ids: [a.id, b.id] })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ deletedCount: 2 })
+  })
+})
+
+describe('POST /leads/generate-messages', () => {
+  it('rejects a request with no JSON body', async () => {
+    const res = await request(app).post('/leads/generate-messages')
+
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects a non-string template', async () => {
+    const lead = await createLead()
+
+    const res = await request(app)
+      .post('/leads/generate-messages')
+      .send({ leadIds: [lead.id], template: 42 })
+
+    expect(res.status).toBe(400)
+  })
+
+  it('validates leadIds and template', async () => {
+    const res = await request(app).post('/leads/generate-messages').send({ leadIds: [], template: 'x' })
+
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 404 when none of the leadIds exist', async () => {
+    const res = await request(app)
+      .post('/leads/generate-messages')
+      .send({ leadIds: [999999], template: 'Hi {firstName}' })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('generates and persists a message per lead', async () => {
+    const lead = await createLead()
+
+    const res = await request(app)
+      .post('/leads/generate-messages')
+      .send({ leadIds: [lead.id], template: 'Hi {firstName}' })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ success: true, generatedCount: 1, errors: [] })
+    await expect(prisma.lead.findUnique({ where: { id: lead.id } })).resolves.toMatchObject({
+      message: 'Hi John',
+    })
+  })
+
+  it('collects a per-lead error when the template references a field the lead lacks, without failing the batch', async () => {
+    const lead = await createLead({ companyName: null })
+
+    const res = await request(app)
+      .post('/leads/generate-messages')
+      .send({ leadIds: [lead.id], template: 'Hi {firstName}, from {companyName}' })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ success: true, generatedCount: 0 })
+    expect(res.body.errors).toEqual([
+      { leadId: lead.id, leadName: 'John Doe', error: 'Missing required field: companyName' },
+    ])
+  })
+})
+
+describe('POST /leads/bulk', () => {
+  it('rejects a request with no JSON body', async () => {
+    const res = await request(app).post('/leads/bulk')
+
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects a missing/empty leads array', async () => {
+    const res = await request(app).post('/leads/bulk').send({ leads: [] })
+
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects when no lead in the payload has the required fields', async () => {
+    const res = await request(app)
+      .post('/leads/bulk')
+      .send({ leads: [{ firstName: '', lastName: 'Doe', email: 'x@example.com' }] })
+
+    expect(res.status).toBe(400)
+  })
+
+  it('imports valid leads, skips duplicates, and counts invalid ones', async () => {
+    await createLead({ firstName: 'Existing', lastName: 'Person', email: 'existing@example.com' })
+
+    const res = await request(app)
+      .post('/leads/bulk')
+      .send({
+        leads: [
+          { firstName: 'New', lastName: 'Person', email: 'new@example.com' },
+          { firstName: 'Existing', lastName: 'Person', email: 'dup@example.com' },
+          { firstName: '', lastName: 'Invalid', email: 'invalid@example.com' },
+        ],
+      })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ success: true, importedCount: 1, duplicatesSkipped: 1, invalidLeads: 1 })
+  })
+
+  it('currently stores any countryCode value as-is, without validating it (baseline for bug 1)', async () => {
+    const res = await request(app)
+      .post('/leads/bulk')
+      .send({
+        leads: [{ firstName: 'Bad', lastName: 'Code', email: 'bad@example.com', countryCode: 'XXX' }],
+      })
+
+    expect(res.status).toBe(200)
+    expect(res.body.importedCount).toBe(1)
+    const created = await prisma.lead.findFirst({ where: { email: 'bad@example.com' } })
+    expect(created?.countryCode).toBe('XXX')
+  })
+})
+
+describe('POST /leads/verify-emails', () => {
+  it('rejects a request with no JSON body', async () => {
+    const res = await request(app).post('/leads/verify-emails')
+
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects a missing/empty leadIds array', async () => {
+    const res = await request(app).post('/leads/verify-emails').send({ leadIds: [] })
+
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 404 when none of the leadIds exist', async () => {
+    const res = await request(app)
+      .post('/leads/verify-emails')
+      .send({ leadIds: [999999] })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('verifies each lead via the workflow and persists the result', async () => {
+    const lead = await createLead()
+    workflowExecuteMock.mockResolvedValue(true)
+
+    const res = await request(app)
+      .post('/leads/verify-emails')
+      .send({ leadIds: [lead.id] })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ success: true, verifiedCount: 1 })
+    await expect(prisma.lead.findUnique({ where: { id: lead.id } })).resolves.toMatchObject({
+      emailVerified: true,
+    })
+    expect(connectionCloseMock).toHaveBeenCalled()
+  })
+
+  it('collects a per-lead error instead of failing the whole batch', async () => {
+    const lead = await createLead()
+    workflowExecuteMock.mockRejectedValue(new Error('workflow boom'))
+
+    const res = await request(app)
+      .post('/leads/verify-emails')
+      .send({ leadIds: [lead.id] })
+
+    expect(res.status).toBe(200)
+    expect(res.body.verifiedCount).toBe(0)
+    expect(res.body.errors).toEqual([{ leadId: lead.id, leadName: 'John Doe', error: 'workflow boom' }])
+  })
+})
