@@ -15,6 +15,15 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
       include: ['src/**'],
       exclude: ['src/worker.ts', 'src/test/**'],
+      // Floor pinned to today's baseline (`pnpm test:coverage`) — coverage may only go up.
+      // Raise these numbers in the same commit that adds the coverage; never lower them to
+      // make a commit pass.
+      thresholds: {
+        statements: 100,
+        branches: 93.4,
+        functions: 100,
+        lines: 100,
+      },
     },
   },
   resolve: {

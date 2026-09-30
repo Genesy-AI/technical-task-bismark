@@ -17,6 +17,15 @@ export default defineConfig({
         'src/api/mutations/useApiMutation.ts',
         'src/test/**',
       ],
+      // Floor pinned to today's baseline (`pnpm test:coverage`) — coverage may only go up.
+      // Raise these numbers in the same commit that adds the coverage; never lower them to
+      // make a commit pass.
+      thresholds: {
+        statements: 99.73,
+        branches: 97.68,
+        functions: 92.72,
+        lines: 99.73,
+      },
     },
   },
   resolve: {
