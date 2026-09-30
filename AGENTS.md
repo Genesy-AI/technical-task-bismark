@@ -20,11 +20,14 @@ automatically when you're working inside that folder, on top of this file.
   use on `chore/tinyenginy-take-home`.
 - **Coverage only ever goes up, never down.** Both `frontend/vitest.config.ts` and
   `backend/vitest.config.ts` pin `coverage.thresholds` to the current baseline, so `pnpm
-  test:coverage` fails outright on any regression. A `PreToolUse` hook
-  (`.claude/settings.json`) also blocks `git commit` if that check fails for whichever of
-  frontend/backend has staged changes. When you genuinely add coverage, raise the
-  threshold to the new number in the same commit — never lower a threshold just to get a
-  commit through.
+  test:coverage` fails outright on any regression. When you genuinely add coverage, raise
+  the threshold to the new number in the same commit — never lower a threshold just to get
+  a commit through.
+- **`git commit` is gated.** `.claude/hooks/verify-before-commit.sh` (`PreToolUse` on
+  `Bash`) runs `build`, `lint` (skipped where the script doesn't exist, e.g. backend), and
+  `test:coverage` for both frontend and backend — unconditionally, not scoped to "what's
+  staged," since the hook fires before the commit command actually runs — and denies the
+  commit if any step fails.
 - **Dev servers (`pnpm dev`, the Temporal worker) are started by the user, not by Claude** —
   don't run them unless explicitly asked.
 - Don't touch `backend/prisma/dev.db` (committed sample data) from tests — see
