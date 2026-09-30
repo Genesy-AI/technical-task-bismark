@@ -18,6 +18,12 @@ automatically when you're working inside that folder, on top of this file.
 - **One commit per fix/feature**, conventional-commit style (`fix:`, `feat:`, `test:`,
   `refactor:`, `chore:`, `style:`, `docs:`) — check `git log` for the exact style already in
   use on `chore/tinyenginy-take-home`.
+- **Never update `TASKS.md` or commit right after implementing a fix, even if
+  build/lint/tests/coverage are all green.** Say the checks are green and stop — wait for the
+  user to manually test the change themselves (e.g. in the running UI) and explicitly say
+  it's good. Only then update `TASKS.md` and commit. This is per fix/feature, every time —
+  green CI is necessary but the user's own sign-off is the actual gate, not something to skip
+  because the automated checks already look right.
 - **Coverage only ever goes up, never down.** Both `frontend/vitest.config.ts` and
   `backend/vitest.config.ts` pin `coverage.thresholds` to the current baseline, so `pnpm
   test:coverage` fails outright on any regression. When you genuinely add coverage, raise
