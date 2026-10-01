@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { parseCsv, isValidEmail, isValidCountryCode } from './csvParser'
+import {
+  parseCsv,
+  isValidEmail,
+  isValidCountryCode,
+  isValidYearsInRole,
+  isValidLinkedinUrl,
+} from './csvParser'
 
 describe('isValidEmail', () => {
   it('should return true for valid email addresses', () => {
@@ -30,6 +36,34 @@ describe('isValidCountryCode', () => {
     expect(isValidCountryCode('XXX')).toBe(false)
     expect(isValidCountryCode('12')).toBe(false)
     expect(isValidCountryCode('')).toBe(false)
+  })
+})
+
+describe('isValidYearsInRole', () => {
+  it('should return true for a non-negative integer', () => {
+    expect(isValidYearsInRole('0')).toBe(true)
+    expect(isValidYearsInRole('5')).toBe(true)
+  })
+
+  it('should return false for negative numbers, decimals, or text', () => {
+    expect(isValidYearsInRole('-1')).toBe(false)
+    expect(isValidYearsInRole('2.5')).toBe(false)
+    expect(isValidYearsInRole('five')).toBe(false)
+    expect(isValidYearsInRole('')).toBe(false)
+  })
+})
+
+describe('isValidLinkedinUrl', () => {
+  it('should return true for a linkedin.com URL, with or without protocol/subdomain', () => {
+    expect(isValidLinkedinUrl('https://www.linkedin.com/in/jane-doe')).toBe(true)
+    expect(isValidLinkedinUrl('linkedin.com/in/jane-doe')).toBe(true)
+    expect(isValidLinkedinUrl('https://uk.linkedin.com/in/jane-doe')).toBe(true)
+  })
+
+  it('should return false for a non-linkedin URL or empty string', () => {
+    expect(isValidLinkedinUrl('https://example.com/in/jane-doe')).toBe(false)
+    expect(isValidLinkedinUrl('https://linkedin.com')).toBe(false)
+    expect(isValidLinkedinUrl('')).toBe(false)
   })
 })
 
@@ -267,6 +301,72 @@ John,Doe,john@example.com,`
     const result = parseCsv(csv)
 
     expect(result[0].countryCode).toBeUndefined()
+    expect(result[0].warnings).toEqual([])
+  })
+
+  it('should parse valid phoneNumber, yearsInRole, and linkedinUrl with no warnings', () => {
+    const csv = `firstName,lastName,email,phoneNumber,yearsInRole,linkedinUrl
+John,Doe,john@example.com,+1-555-0100,5,https://www.linkedin.com/in/john-doe`
+
+    const result = parseCsv(csv)
+
+    expect(result[0].phoneNumber).toBe('+1-555-0100')
+    expect(result[0].yearsInRole).toBe('5')
+    expect(result[0].linkedinUrl).toBe('https://www.linkedin.com/in/john-doe')
+    expect(result[0].warnings).toEqual([])
+  })
+
+  it('should accept a "LinkedIn" header as an alias for linkedinUrl', () => {
+    const csv = `firstName,lastName,email,LinkedIn
+John,Doe,john@example.com,https://www.linkedin.com/in/john-doe`
+
+    const result = parseCsv(csv)
+
+    expect(result[0].linkedinUrl).toBe('https://www.linkedin.com/in/john-doe')
+  })
+
+  it('should clear an invalid yearsInRole, keep the lead valid, and report a warning', () => {
+    const csv = `firstName,lastName,email,yearsInRole
+John,Doe,john@example.com,five`
+
+    const result = parseCsv(csv)
+
+    expect(result[0].isValid).toBe(true)
+    expect(result[0].yearsInRole).toBeUndefined()
+    expect(result[0].warnings).toEqual([
+      'Invalid years in role "five" (expected a non-negative whole number) — cleared',
+    ])
+  })
+
+  it('should clear an invalid linkedinUrl, keep the lead valid, and report a warning', () => {
+    const csv = `firstName,lastName,email,linkedinUrl
+John,Doe,john@example.com,not-a-url`
+
+    const result = parseCsv(csv)
+
+    expect(result[0].isValid).toBe(true)
+    expect(result[0].linkedinUrl).toBeUndefined()
+    expect(result[0].warnings).toEqual(['Invalid LinkedIn URL "not-a-url" — cleared'])
+  })
+
+  it('should treat blank phoneNumber, yearsInRole, and linkedinUrl values as absent', () => {
+    const csv = `firstName,lastName,email,phoneNumber,yearsInRole,linkedinUrl
+John,Doe,john@example.com,,,`
+
+    const result = parseCsv(csv)
+
+    expect(result[0].phoneNumber).toBeUndefined()
+    expect(result[0].yearsInRole).toBeUndefined()
+    expect(result[0].linkedinUrl).toBeUndefined()
+    expect(result[0].warnings).toEqual([])
+  })
+
+  it('should not warn when yearsInRole and linkedinUrl are absent', () => {
+    const csv = `firstName,lastName,email
+John,Doe,john@example.com`
+
+    const result = parseCsv(csv)
+
     expect(result[0].warnings).toEqual([])
   })
 

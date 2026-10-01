@@ -65,6 +65,21 @@ describe('MessageTemplateModal', () => {
     expect(screen.getByRole('button', { name: 'Generate Messages' })).toBeEnabled()
   })
 
+  it('groups insertable fields by category, including the new phone/years/linkedin fields', () => {
+    renderModal()
+
+    expect(screen.getByText('Basic Info')).toBeInTheDocument()
+    expect(screen.getByText('Professional')).toBeInTheDocument()
+    expect(screen.getByText('Contact')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('{phoneNumber}'))
+    fireEvent.click(screen.getByText('{yearsInRole}'))
+    fireEvent.click(screen.getByText('{linkedinUrl}'))
+
+    const textarea = screen.getByLabelText('Message Template') as HTMLTextAreaElement
+    expect(textarea.value).toBe('{phoneNumber}{yearsInRole}{linkedinUrl}')
+  })
+
   it('submits the trimmed template with the selected lead ids', async () => {
     vi.mocked(api.leads.generateMessages).mockResolvedValue({
       success: true,

@@ -104,6 +104,49 @@ describe('CsvImportModal', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it('previews and imports phoneNumber, yearsInRole, and linkedinUrl when present in the CSV', async () => {
+    vi.mocked(api.leads.bulkImport).mockResolvedValue({
+      success: true,
+      importedCount: 1,
+      duplicatesSkipped: 0,
+      invalidLeads: 0,
+      errors: [],
+      warnings: [],
+    })
+
+    const csvWithNewFields =
+      'firstName,lastName,email,phoneNumber,yearsInRole,linkedinUrl\n' +
+      'John,Doe,john@example.com,+1-555-0100,5,https://www.linkedin.com/in/john-doe'
+
+    renderWithQueryClient(<CsvImportModal isOpen={true} onClose={vi.fn()} />)
+    await selectFile(makeFile(csvWithNewFields))
+    await screen.findByText('Import Summary')
+
+    expect(screen.getByText('+1-555-0100')).toBeInTheDocument()
+    expect(screen.getByText('5')).toBeInTheDocument()
+    expect(screen.getByText('https://www.linkedin.com/in/john-doe')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Import 1 Valid Leads'))
+
+    await waitFor(() => {
+      expect(api.leads.bulkImport).toHaveBeenCalledWith({
+        leads: [
+          {
+            firstName: 'John',
+            lastName: 'Doe',
+            email: 'john@example.com',
+            jobTitle: undefined,
+            countryCode: undefined,
+            companyName: undefined,
+            phoneNumber: '+1-555-0100',
+            yearsInRole: '5',
+            linkedinUrl: 'https://www.linkedin.com/in/john-doe',
+          },
+        ],
+      })
+    })
+  })
+
   it('includes duplicate and invalid counts in the success message', async () => {
     vi.mocked(api.leads.bulkImport).mockResolvedValue({
       success: true,

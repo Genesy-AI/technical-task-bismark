@@ -106,7 +106,13 @@ export const MessageTemplateModal: FC<MessageTemplateModalProps> = ({
     }
   }, [isOpen, handleClose])
 
-  const availableFields = ['firstName', 'lastName', 'email', 'jobTitle', 'companyName', 'countryCode']
+  // Grouped by category so the picker scales as more lead fields get added — append new
+  // fields to an existing group, or add a new group, instead of growing one long row.
+  const availableFieldGroups: { label: string; fields: string[] }[] = [
+    { label: 'Basic Info', fields: ['firstName', 'lastName', 'email'] },
+    { label: 'Professional', fields: ['jobTitle', 'companyName', 'countryCode', 'yearsInRole'] },
+    { label: 'Contact', fields: ['phoneNumber', 'linkedinUrl'] },
+  ]
 
   const insertField = (field: string) => {
     if (textareaRef.current) {
@@ -155,20 +161,25 @@ export const MessageTemplateModal: FC<MessageTemplateModalProps> = ({
               <label htmlFor="message-template" className="block text-sm font-medium text-gray-700 mb-2">
                 Message Template
               </label>
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <span className="text-sm text-gray-600">Insert field:</span>
-                  {availableFields.map((field) => (
-                    <button
-                      key={field}
-                      type="button"
-                      onClick={() => insertField(field)}
-                      className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors"
-                    >
-                      {`{${field}}`}
-                    </button>
-                  ))}
-                </div>
+              <div className="space-y-2">
+                <span className="text-sm text-gray-600">Insert field:</span>
+                {availableFieldGroups.map((group) => (
+                  <div key={group.label} className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-gray-400 w-20">{group.label}</span>
+                    {group.fields.map((field) => (
+                      <button
+                        key={field}
+                        type="button"
+                        onClick={() => insertField(field)}
+                        className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors"
+                      >
+                        {`{${field}}`}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-3 mt-3">
                 <textarea
                   ref={textareaRef}
                   id="message-template"

@@ -38,6 +38,9 @@ const baseLead = {
   countryCode: 'US',
   message: 'Hello John',
   emailVerified: null as boolean | null,
+  phoneNumber: '+1-555-0100',
+  yearsInRole: 3,
+  linkedinUrl: 'https://www.linkedin.com/in/john-doe',
   createdAt: '2024-01-15T12:00:00.000Z',
   updatedAt: '2024-01-15T12:00:00.000Z',
 }
@@ -95,6 +98,13 @@ describe('LeadsList', () => {
     expect(screen.getAllByText('US')).toHaveLength(3)
     expect(screen.getAllByText('Hello John')).toHaveLength(3)
     expect(screen.getAllByText('Jan 15, 2024')).toHaveLength(3)
+    expect(screen.getAllByText('+1-555-0100')).toHaveLength(3)
+    expect(screen.getAllByText('3')).toHaveLength(3)
+    expect(screen.getAllByRole('link', { name: 'View profile' })).toHaveLength(3)
+    expect(screen.getAllByRole('link', { name: 'View profile' })[0]).toHaveAttribute(
+      'href',
+      'https://www.linkedin.com/in/john-doe'
+    )
 
     expect(screen.getByText(/❓/)).toBeInTheDocument()
     expect(screen.getByText(/✅/)).toBeInTheDocument()
@@ -109,6 +119,9 @@ describe('LeadsList', () => {
         companyName: null,
         countryCode: null,
         message: null,
+        phoneNumber: null,
+        yearsInRole: null,
+        linkedinUrl: null,
       },
     ])
 
@@ -116,7 +129,7 @@ describe('LeadsList', () => {
 
     await screen.findByText('John Doe')
     const dashes = screen.getAllByText('-')
-    expect(dashes.length).toBeGreaterThanOrEqual(4)
+    expect(dashes.length).toBeGreaterThanOrEqual(7)
   })
 
   it('renders leads with a missing last name and email', async () => {

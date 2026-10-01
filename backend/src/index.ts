@@ -4,6 +4,8 @@ import { Connection, Client } from '@temporalio/client'
 import { verifyEmailWorkflow } from './workflows'
 import { generateMessageFromTemplate } from './utils/messageGenerator'
 import { isValidCountryCode } from './utils/countryCode'
+import { isValidLinkedinUrl } from './utils/linkedinUrl'
+import { parseYearsInRole } from './utils/yearsInRole'
 import { runTemporalWorker } from './worker'
 
 // Overridable so integration tests can point at an isolated SQLite file instead of prisma/dev.db.
@@ -244,6 +246,33 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
         }
       }
 
+      const trimmedYearsInRole = lead.yearsInRole ? String(lead.yearsInRole).trim() : ''
+      let yearsInRole: number | null = null
+
+      if (trimmedYearsInRole) {
+        yearsInRole = parseYearsInRole(trimmedYearsInRole)
+        if (yearsInRole === null) {
+          warnings.push({
+            lead,
+            warning: `Invalid years in role "${trimmedYearsInRole}" (expected a non-negative whole number) — cleared`,
+          })
+        }
+      }
+
+      const trimmedLinkedinUrl = lead.linkedinUrl ? String(lead.linkedinUrl).trim() : ''
+      let linkedinUrl: string | null = null
+
+      if (trimmedLinkedinUrl) {
+        if (isValidLinkedinUrl(trimmedLinkedinUrl)) {
+          linkedinUrl = trimmedLinkedinUrl
+        } else {
+          warnings.push({
+            lead,
+            warning: `Invalid LinkedIn URL "${trimmedLinkedinUrl}" — cleared`,
+          })
+        }
+      }
+
       try {
         await prisma.lead.create({
           data: {
@@ -253,6 +282,9 @@ app.post('/leads/bulk', async (req: Request, res: Response) => {
             jobTitle: lead.jobTitle ? lead.jobTitle.trim() : null,
             countryCode,
             companyName: lead.companyName ? lead.companyName.trim() : null,
+            phoneNumber: lead.phoneNumber ? String(lead.phoneNumber).trim() : null,
+            yearsInRole,
+            linkedinUrl,
           },
         })
         importedCount++

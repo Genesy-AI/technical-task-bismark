@@ -7,6 +7,9 @@ export interface CsvLead {
   jobTitle?: string
   countryCode?: string
   companyName?: string
+  phoneNumber?: string
+  yearsInRole?: string
+  linkedinUrl?: string
   isValid: boolean
   errors: string[]
   warnings: string[]
@@ -20,6 +23,14 @@ export const isValidEmail = (email: string): boolean => {
 
 export const isValidCountryCode = (countryCode: string): boolean => {
   return /^[A-Za-z]{2}$/.test(countryCode)
+}
+
+export const isValidYearsInRole = (yearsInRole: string): boolean => {
+  return /^\d+$/.test(yearsInRole)
+}
+
+export const isValidLinkedinUrl = (linkedinUrl: string): boolean => {
+  return /^(https?:\/\/)?([\w-]+\.)?linkedin\.com\/.+$/i.test(linkedinUrl)
 }
 
 export const parseCsv = (content: string): CsvLead[] => {
@@ -78,6 +89,16 @@ export const parseCsv = (content: string): CsvLead[] => {
         case 'companyname':
           lead.companyName = trimmedValue || undefined
           break
+        case 'phonenumber':
+          lead.phoneNumber = trimmedValue || undefined
+          break
+        case 'yearsinrole':
+          lead.yearsInRole = trimmedValue || undefined
+          break
+        case 'linkedinurl':
+        case 'linkedin':
+          lead.linkedinUrl = trimmedValue || undefined
+          break
       }
     })
 
@@ -100,6 +121,18 @@ export const parseCsv = (content: string): CsvLead[] => {
       lead.countryCode = undefined
     } else if (lead.countryCode) {
       lead.countryCode = lead.countryCode.toUpperCase()
+    }
+
+    if (lead.yearsInRole && !isValidYearsInRole(lead.yearsInRole)) {
+      warnings.push(
+        `Invalid years in role "${lead.yearsInRole}" (expected a non-negative whole number) — cleared`
+      )
+      lead.yearsInRole = undefined
+    }
+
+    if (lead.linkedinUrl && !isValidLinkedinUrl(lead.linkedinUrl)) {
+      warnings.push(`Invalid LinkedIn URL "${lead.linkedinUrl}" — cleared`)
+      lead.linkedinUrl = undefined
     }
 
     data.push({

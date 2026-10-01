@@ -293,6 +293,80 @@ describe('POST /leads/bulk', () => {
     const created = await prisma.lead.findFirst({ where: { email: 'good@example.com' } })
     expect(created?.countryCode).toBe('US')
   })
+
+  it('imports phoneNumber, yearsInRole, and linkedinUrl when valid', async () => {
+    const res = await request(app)
+      .post('/leads/bulk')
+      .send({
+        leads: [
+          {
+            firstName: 'Full',
+            lastName: 'Fields',
+            email: 'full@example.com',
+            phoneNumber: '+1-555-0100',
+            yearsInRole: '5',
+            linkedinUrl: 'https://www.linkedin.com/in/full-fields',
+          },
+        ],
+      })
+
+    expect(res.status).toBe(200)
+    expect(res.body.warnings).toEqual([])
+    const created = await prisma.lead.findFirst({ where: { email: 'full@example.com' } })
+    expect(created).toMatchObject({
+      phoneNumber: '+1-555-0100',
+      yearsInRole: 5,
+      linkedinUrl: 'https://www.linkedin.com/in/full-fields',
+    })
+  })
+
+  it('clears an invalid yearsInRole, still imports the lead, and reports a warning', async () => {
+    const res = await request(app)
+      .post('/leads/bulk')
+      .send({
+        leads: [{ firstName: 'Bad', lastName: 'Years', email: 'badyears@example.com', yearsInRole: 'five' }],
+      })
+
+    expect(res.status).toBe(200)
+    expect(res.body.warnings).toEqual([
+      {
+        lead: { firstName: 'Bad', lastName: 'Years', email: 'badyears@example.com', yearsInRole: 'five' },
+        warning: 'Invalid years in role "five" (expected a non-negative whole number) — cleared',
+      },
+    ])
+    const created = await prisma.lead.findFirst({ where: { email: 'badyears@example.com' } })
+    expect(created?.yearsInRole).toBeNull()
+  })
+
+  it('clears an invalid linkedinUrl, still imports the lead, and reports a warning', async () => {
+    const res = await request(app)
+      .post('/leads/bulk')
+      .send({
+        leads: [
+          {
+            firstName: 'Bad',
+            lastName: 'Linkedin',
+            email: 'badlinkedin@example.com',
+            linkedinUrl: 'not-a-url',
+          },
+        ],
+      })
+
+    expect(res.status).toBe(200)
+    expect(res.body.warnings).toEqual([
+      {
+        lead: {
+          firstName: 'Bad',
+          lastName: 'Linkedin',
+          email: 'badlinkedin@example.com',
+          linkedinUrl: 'not-a-url',
+        },
+        warning: 'Invalid LinkedIn URL "not-a-url" — cleared',
+      },
+    ])
+    const created = await prisma.lead.findFirst({ where: { email: 'badlinkedin@example.com' } })
+    expect(created?.linkedinUrl).toBeNull()
+  })
 })
 
 describe('POST /leads/verify-emails', () => {
