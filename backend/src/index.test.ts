@@ -462,3 +462,146 @@ describe('POST /leads/verify-emails', () => {
     expect(res.body.errors).toEqual([{ leadId: bad.id, leadName: 'John Doe', error: 'workflow boom' }])
   })
 })
+
+describe('POST /leads/enrich-phone', () => {
+  it('rejects a request with no JSON body', async () => {
+    const res = await request(app).post('/leads/enrich-phone')
+
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects a missing/empty leadIds array', async () => {
+    const res = await request(app).post('/leads/enrich-phone').send({ leadIds: [] })
+
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 404 when none of the leadIds exist', async () => {
+    const res = await request(app)
+      .post('/leads/enrich-phone')
+      .send({ leadIds: [999999] })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('enriches a lead with the phone the workflow returns, using a deterministic workflowId', async () => {
+    const lead = await createLead()
+    workflowExecuteMock.mockResolvedValue('+1-555-0100')
+
+    const res = await request(app)
+      .post('/leads/enrich-phone')
+      .send({ leadIds: [lead.id] })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ success: true, enrichedCount: 1, noDataCount: 0, skippedCount: 0 })
+    await expect(prisma.lead.findUnique({ where: { id: lead.id } })).resolves.toMatchObject({
+      phoneNumber: '+1-555-0100',
+      phoneEnriched: true,
+    })
+    expect(workflowExecuteMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ workflowId: `enrich-phone-${lead.id}` })
+    )
+    expect(connectionCloseMock).toHaveBeenCalled()
+  })
+
+  it('passes companyName as companyWebsite (Orion Connect requires a non-empty value and there is no dedicated website field)', async () => {
+    const lead = await createLead({ companyName: 'Acme Inc' })
+    workflowExecuteMock.mockResolvedValue(null)
+
+    await request(app)
+      .post('/leads/enrich-phone')
+      .send({ leadIds: [lead.id] })
+
+    expect(workflowExecuteMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        args: [
+          expect.objectContaining({
+            fullName: 'John Doe',
+            companyWebsite: 'Acme Inc',
+            email: lead.email,
+            jobTitle: null,
+          }),
+        ],
+      })
+    )
+  })
+
+  it('marks a lead as "no data found" (phoneEnriched: false) when no provider finds a phone', async () => {
+    const lead = await createLead()
+    workflowExecuteMock.mockResolvedValue(null)
+
+    const res = await request(app)
+      .post('/leads/enrich-phone')
+      .send({ leadIds: [lead.id] })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ enrichedCount: 0, noDataCount: 1, skippedCount: 0 })
+    await expect(prisma.lead.findUnique({ where: { id: lead.id } })).resolves.toMatchObject({
+      phoneNumber: null,
+      phoneEnriched: false,
+    })
+  })
+
+  it('skips a lead that already has a phoneNumber instead of calling the providers', async () => {
+    const lead = await createLead({ phoneNumber: '+1-555-9999' })
+
+    const res = await request(app)
+      .post('/leads/enrich-phone')
+      .send({ leadIds: [lead.id] })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ enrichedCount: 0, noDataCount: 0, skippedCount: 1 })
+    expect(workflowExecuteMock).not.toHaveBeenCalled()
+  })
+
+  it('skips a lead already marked as "no data found" on a prior run (idempotent)', async () => {
+    const lead = await createLead({ phoneEnriched: false })
+
+    const res = await request(app)
+      .post('/leads/enrich-phone')
+      .send({ leadIds: [lead.id] })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ skippedCount: 1 })
+    expect(workflowExecuteMock).not.toHaveBeenCalled()
+  })
+
+  it('does not re-run enrichment on a second call for the same already-enriched lead', async () => {
+    const lead = await createLead()
+    workflowExecuteMock.mockResolvedValue('+1-555-0100')
+
+    await request(app)
+      .post('/leads/enrich-phone')
+      .send({ leadIds: [lead.id] })
+
+    workflowExecuteMock.mockClear()
+
+    const secondRes = await request(app)
+      .post('/leads/enrich-phone')
+      .send({ leadIds: [lead.id] })
+
+    expect(secondRes.status).toBe(200)
+    expect(secondRes.body).toMatchObject({ skippedCount: 1 })
+    expect(workflowExecuteMock).not.toHaveBeenCalled()
+  })
+
+  it('collects a per-lead error instead of failing the whole batch', async () => {
+    const lead = await createLead()
+    workflowExecuteMock.mockRejectedValue(new Error('all providers failed'))
+
+    const res = await request(app)
+      .post('/leads/enrich-phone')
+      .send({ leadIds: [lead.id] })
+
+    expect(res.status).toBe(200)
+    expect(res.body.errors).toEqual([
+      { leadId: lead.id, leadName: 'John Doe', error: 'all providers failed' },
+    ])
+    await expect(prisma.lead.findUnique({ where: { id: lead.id } })).resolves.toMatchObject({
+      phoneNumber: null,
+      phoneEnriched: null,
+    })
+  })
+})

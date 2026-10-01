@@ -11,6 +11,7 @@ vi.mock('../api', () => ({
       getMany: vi.fn(),
       deleteMany: vi.fn(),
       verifyEmails: vi.fn(),
+      enrichPhone: vi.fn(),
     },
   },
 }))
@@ -41,6 +42,7 @@ const baseLead = {
   phoneNumber: '+1-555-0100',
   yearsInRole: 3,
   linkedinUrl: 'https://www.linkedin.com/in/john-doe',
+  phoneEnriched: null as boolean | null,
   createdAt: '2024-01-15T12:00:00.000Z',
   updatedAt: '2024-01-15T12:00:00.000Z',
 }
@@ -316,6 +318,135 @@ describe('LeadsList', () => {
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('Verified 1 email')
     })
+  })
+
+  it('enriches phone numbers for selected leads via the enrich dropdown', async () => {
+    vi.mocked(api.leads.getMany).mockResolvedValue([{ ...baseLead, id: 1 }])
+    vi.mocked(api.leads.enrichPhone).mockResolvedValue({
+      success: true,
+      enrichedCount: 1,
+      noDataCount: 0,
+      skippedCount: 0,
+      results: [],
+      errors: [],
+    })
+
+    renderWithQueryClient(<LeadsList />)
+    await screen.findByText('John Doe')
+
+    fireEvent.click(screen.getAllByRole('checkbox')[1])
+    fireEvent.click(screen.getByRole('button', { name: /enrich/i }))
+    fireEvent.click(screen.getByText('Enrich Phone'))
+
+    await waitFor(() => {
+      expect(api.leads.enrichPhone).toHaveBeenCalledWith({ leadIds: [1] })
+    })
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Found 1 phone')
+    })
+  })
+
+  it('mentions no-data and skipped counts in the enrich-phone success toast', async () => {
+    vi.mocked(api.leads.getMany).mockResolvedValue([{ ...baseLead, id: 1 }])
+    vi.mocked(api.leads.enrichPhone).mockResolvedValue({
+      success: true,
+      enrichedCount: 0,
+      noDataCount: 1,
+      skippedCount: 2,
+      results: [],
+      errors: [],
+    })
+
+    renderWithQueryClient(<LeadsList />)
+    await screen.findByText('John Doe')
+
+    fireEvent.click(screen.getAllByRole('checkbox')[1])
+    fireEvent.click(screen.getByRole('button', { name: /enrich/i }))
+    fireEvent.click(screen.getByText('Enrich Phone'))
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        'Found 0 phones (1 with no data found) (2 already had a phone, skipped)'
+      )
+    })
+  })
+
+  it('shows an error toast when enriching phone numbers fails', async () => {
+    vi.mocked(api.leads.getMany).mockResolvedValue([{ ...baseLead, id: 1 }])
+    vi.mocked(api.leads.enrichPhone).mockRejectedValue(new Error('boom'))
+
+    renderWithQueryClient(<LeadsList />)
+    await screen.findByText('John Doe')
+
+    fireEvent.click(screen.getAllByRole('checkbox')[1])
+    fireEvent.click(screen.getByRole('button', { name: /enrich/i }))
+    fireEvent.click(screen.getByText('Enrich Phone'))
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Failed to enrich phone numbers. Please try again.')
+    })
+  })
+
+  it('shows pending feedback (spinner + disabled button) while phone numbers are being enriched', async () => {
+    vi.mocked(api.leads.getMany).mockResolvedValue([{ ...baseLead, id: 1 }])
+    let resolveEnrich: (value: {
+      success: boolean
+      enrichedCount: number
+      noDataCount: number
+      skippedCount: number
+      results: never[]
+      errors: never[]
+    }) => void = () => {}
+    vi.mocked(api.leads.enrichPhone).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveEnrich = resolve
+        })
+    )
+
+    renderWithQueryClient(<LeadsList />)
+    await screen.findByText('John Doe')
+
+    fireEvent.click(screen.getAllByRole('checkbox')[1])
+    fireEvent.click(screen.getByRole('button', { name: /enrich/i }))
+    fireEvent.click(screen.getByText('Enrich Phone'))
+
+    const pendingButton = await screen.findByRole('button', { name: /enriching/i })
+    expect(pendingButton).toBeDisabled()
+
+    resolveEnrich({
+      success: true,
+      enrichedCount: 1,
+      noDataCount: 0,
+      skippedCount: 0,
+      results: [],
+      errors: [],
+    })
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Found 1 phone')
+    })
+  })
+
+  it('shows "No data found" for a lead whose enrichment found nothing', async () => {
+    vi.mocked(api.leads.getMany).mockResolvedValue([
+      { ...baseLead, id: 1, phoneNumber: null, phoneEnriched: false },
+    ])
+
+    renderWithQueryClient(<LeadsList />)
+
+    expect(await screen.findByText('No data found')).toBeInTheDocument()
+  })
+
+  it('shows a dash for a lead whose phone was never enriched', async () => {
+    vi.mocked(api.leads.getMany).mockResolvedValue([
+      { ...baseLead, id: 1, phoneNumber: null, phoneEnriched: null },
+    ])
+
+    renderWithQueryClient(<LeadsList />)
+    await screen.findByText('John Doe')
+
+    expect(screen.queryByText('No data found')).not.toBeInTheDocument()
   })
 
   it('shows a not-implemented toast for the gender guessing action', async () => {

@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import express, { Request, Response } from 'express'
 import { Connection, Client } from '@temporalio/client'
-import { verifyEmailWorkflow } from './workflows'
+import { verifyEmailWorkflow, enrichPhoneWorkflow } from './workflows'
 import { generateMessageFromTemplate } from './utils/messageGenerator'
 import { isValidCountryCode } from './utils/countryCode'
 import { isValidLinkedinUrl } from './utils/linkedinUrl'
@@ -379,6 +379,100 @@ app.post('/leads/verify-emails', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error verifying emails:', error)
     res.status(500).json({ error: 'Failed to verify emails' })
+  }
+  /* v8 ignore stop */
+})
+
+app.post('/leads/enrich-phone', async (req: Request, res: Response) => {
+  if (!req.body || typeof req.body !== 'object') {
+    return res.status(400).json({ error: 'Request body is required and must be valid JSON' })
+  }
+
+  const { leadIds } = req.body as { leadIds?: number[] }
+
+  if (!Array.isArray(leadIds) || leadIds.length === 0) {
+    return res.status(400).json({ error: 'leadIds must be a non-empty array' })
+  }
+
+  try {
+    const leads = await prisma.lead.findMany({
+      where: { id: { in: leadIds.map((id) => Number(id)) } },
+    })
+
+    if (leads.length === 0) {
+      return res.status(404).json({ error: 'No leads found with the provided IDs' })
+    }
+
+    const connection = await Connection.connect({ address: 'localhost:7233' })
+    const client = new Client({ connection, namespace: 'default' })
+
+    const settledResults = await Promise.allSettled(
+      leads.map(async (lead) => {
+        // Idempotent: a lead that already has a phone (CSV import or a previous
+        // enrichment) or was already attempted (found nothing last time) is skipped
+        // instead of re-querying the providers.
+        if (lead.phoneNumber || lead.phoneEnriched !== null) {
+          return { leadId: lead.id, phoneNumber: lead.phoneNumber, skipped: true }
+        }
+
+        const phone = await client.workflow.execute(enrichPhoneWorkflow, {
+          taskQueue: 'myQueue',
+          workflowId: `enrich-phone-${lead.id}`,
+          args: [
+            {
+              fullName: `${lead.firstName} ${lead.lastName}`.trim(),
+              // Orion Connect requires a non-empty companyWebsite (verified against the
+              // live sandbox) and there's no dedicated website field on the lead model;
+              // companyName is the closest real data we have, better than always failing.
+              companyWebsite: lead.companyName,
+              email: lead.email,
+              jobTitle: lead.jobTitle,
+            },
+          ],
+        })
+
+        await prisma.lead.update({
+          where: { id: lead.id },
+          data: { phoneNumber: phone, phoneEnriched: phone !== null },
+        })
+
+        return { leadId: lead.id, phoneNumber: phone, skipped: false }
+      })
+    )
+
+    let enrichedCount = 0
+    let noDataCount = 0
+    let skippedCount = 0
+    const results: Array<{ leadId: number; phoneNumber: string | null; skipped: boolean }> = []
+    const errors: Array<{ leadId: number; leadName: string; error: string }> = []
+
+    settledResults.forEach((outcome, index) => {
+      const lead = leads[index]
+      if (outcome.status === 'fulfilled') {
+        results.push(outcome.value)
+        if (outcome.value.skipped) {
+          skippedCount += 1
+        } else if (outcome.value.phoneNumber) {
+          enrichedCount += 1
+        } else {
+          noDataCount += 1
+        }
+      } else {
+        errors.push({
+          leadId: lead.id,
+          leadName: `${lead.firstName} ${lead.lastName}`.trim(),
+          error: outcome.reason instanceof Error ? outcome.reason.message : 'Unknown error',
+        })
+      }
+    })
+
+    await connection.close()
+
+    res.json({ success: true, enrichedCount, noDataCount, skippedCount, results, errors })
+    /* v8 ignore start -- generic connection/DB-failure fallback, not reachable without mocking Temporal/Prisma internals */
+  } catch (error) {
+    console.error('Error enriching phone numbers:', error)
+    res.status(500).json({ error: 'Failed to enrich phone numbers' })
   }
   /* v8 ignore stop */
 })

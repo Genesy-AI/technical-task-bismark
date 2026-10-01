@@ -21,10 +21,10 @@ export default defineConfig({
       // Raise these numbers in the same commit that adds the coverage; never lower them to
       // make a commit pass.
       thresholds: {
-        statements: 99.76,
-        branches: 98.03,
-        functions: 93.1,
-        lines: 99.76,
+        statements: 99.77,
+        branches: 98.14,
+        functions: 93.54,
+        lines: 99.77,
       },
     },
   },

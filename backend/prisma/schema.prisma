@@ -22,4 +22,5 @@ model lead {
   phoneNumber String?
   yearsInRole Int?
   linkedinUrl String?
+  phoneEnriched Boolean?
 }

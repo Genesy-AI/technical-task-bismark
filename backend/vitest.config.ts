@@ -20,7 +20,7 @@ export default defineConfig({
       // make a commit pass.
       thresholds: {
         statements: 100,
-        branches: 94.78,
+        branches: 95.51,
         functions: 100,
         lines: 100,
       },
