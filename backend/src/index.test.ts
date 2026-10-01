@@ -344,4 +344,47 @@ describe('POST /leads/verify-emails', () => {
     expect(res.body.verifiedCount).toBe(0)
     expect(res.body.errors).toEqual([{ leadId: lead.id, leadName: 'John Doe', error: 'workflow boom' }])
   })
+
+  it('verifies a batch in parallel instead of one lead blocking the rest', async () => {
+    const slow = await createLead({ email: 'slow@example.com' })
+    const fast = await createLead({ email: 'fast@example.com' })
+
+    workflowExecuteMock.mockImplementation(async (_workflow, options) => {
+      const delay = options.args[0] === 'slow@example.com' ? 60 : 10
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      return true
+    })
+
+    const start = Date.now()
+    const res = await request(app)
+      .post('/leads/verify-emails')
+      .send({ leadIds: [slow.id, fast.id] })
+    const elapsed = Date.now() - start
+
+    expect(res.status).toBe(200)
+    expect(res.body.verifiedCount).toBe(2)
+    // Sequential execution would take >=70ms (60ms + 10ms); parallel stays close to the slowest one.
+    expect(elapsed).toBeLessThan(70)
+  })
+
+  it('keeps processing the rest of the batch when one lead rejects, in parallel', async () => {
+    const ok = await createLead({ email: 'ok@example.com' })
+    const bad = await createLead({ email: 'bad@example.com' })
+
+    workflowExecuteMock.mockImplementation(async (_workflow, options) => {
+      if (options.args[0] === 'bad@example.com') {
+        throw new Error('workflow boom')
+      }
+      return true
+    })
+
+    const res = await request(app)
+      .post('/leads/verify-emails')
+      .send({ leadIds: [ok.id, bad.id] })
+
+    expect(res.status).toBe(200)
+    expect(res.body.verifiedCount).toBe(1)
+    expect(res.body.results).toEqual([{ leadId: ok.id, emailVerified: true }])
+    expect(res.body.errors).toEqual([{ leadId: bad.id, leadName: 'John Doe', error: 'workflow boom' }])
+  })
 })

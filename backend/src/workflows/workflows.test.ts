@@ -10,10 +10,13 @@ vi.mock('@temporalio/workflow', () => ({
 }))
 
 describe('verifyEmailWorkflow', () => {
-  it('proxies the verifyEmail activity with a short startToCloseTimeout', async () => {
+  it('proxies the verifyEmail activity with a realistic timeout and a bounded retry policy', async () => {
     await import('./workflows')
 
-    expect(proxyActivitiesMock).toHaveBeenCalledWith({ startToCloseTimeout: '1 second' })
+    expect(proxyActivitiesMock).toHaveBeenCalledWith({
+      startToCloseTimeout: '30 seconds',
+      retry: { maximumAttempts: 3 },
+    })
   })
 
   it('delegates to the verifyEmail activity and returns its result', async () => {

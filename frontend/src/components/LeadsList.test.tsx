@@ -273,6 +273,38 @@ describe('LeadsList', () => {
     })
   })
 
+  it('shows pending feedback (spinner + disabled button) while emails are being verified', async () => {
+    vi.mocked(api.leads.getMany).mockResolvedValue([{ ...baseLead, id: 1 }])
+    let resolveVerify: (value: {
+      success: boolean
+      verifiedCount: number
+      results: never[]
+      errors: never[]
+    }) => void = () => {}
+    vi.mocked(api.leads.verifyEmails).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveVerify = resolve
+        })
+    )
+
+    renderWithQueryClient(<LeadsList />)
+    await screen.findByText('John Doe')
+
+    fireEvent.click(screen.getAllByRole('checkbox')[1])
+    fireEvent.click(screen.getByRole('button', { name: /enrich/i }))
+    fireEvent.click(screen.getByText('Verify Email'))
+
+    const pendingButton = await screen.findByRole('button', { name: /verifying/i })
+    expect(pendingButton).toBeDisabled()
+
+    resolveVerify({ success: true, verifiedCount: 1, results: [], errors: [] })
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Verified 1 email')
+    })
+  })
+
   it('shows a not-implemented toast for the gender guessing action', async () => {
     vi.mocked(api.leads.getMany).mockResolvedValue([{ ...baseLead, id: 1 }])
 
