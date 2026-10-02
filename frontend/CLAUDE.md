@@ -28,7 +28,7 @@ for them.
 
 `src/api/mutations/useApiMutation.ts` has zero real consumers (confirmed by grepping
 imports across `src/`). Removal is deferred until the end of the take-home, once it's
-certain no remaining task needs it (see `TASKS.md` / `IMPROVEMENTS.md`). It's also the only
+certain no remaining task needs it (see `WORKING_NOTES.md` / `IMPROVEMENTS.md`). It's also the only
 reason two `dependencies` still exist: `lodash` and `ts-toolbelt` are used nowhere else. An
 unused `TablerIcon` type alias in `globalTypes.d.ts` is the same situation for
 `@tabler/icons-react`. Clean up all three together, not piecemeal.
