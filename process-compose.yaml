@@ -1,0 +1,26 @@
+version: "0.5"
+
+processes:
+  temporal:
+    command: "temporal server start-dev"
+    readiness_probe:
+      exec:
+        command: "bash -c 'exec 3<>/dev/tcp/127.0.0.1/7233'"
+      initial_delay_seconds: 2
+      period_seconds: 2
+      timeout_seconds: 2
+      failure_threshold: 15
+
+  backend:
+    command: "pnpm dev"
+    working_dir: "./backend"
+    depends_on:
+      temporal:
+        condition: process_healthy
+
+  frontend:
+    command: "pnpm dev"
+    working_dir: "./frontend"
+    depends_on:
+      backend:
+        condition: process_started
