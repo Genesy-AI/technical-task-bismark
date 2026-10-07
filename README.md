@@ -95,6 +95,24 @@ cd frontend
 pnpm run dev           # Starts the dev server
 ```
 
+**All services together (optional)**
+
+Running `temporal server start-dev`, the backend, and the frontend each in their own
+terminal works, but the backend's Temporal worker exits immediately (`process.exit(1)`,
+see `backend/src/worker.ts`) if it starts before Temporal is actually accepting
+connections — easy to hit when starting things by hand. [`process-compose.yaml`](./process-compose.yaml)
+at the repo root orchestrates all three with the correct startup order: it waits for
+Temporal to report healthy (TCP check on `7233`) before starting the backend, then starts
+the frontend.
+
+Requires the one‑time setup above to have been run first (`pnpm install`,
+`pnpm migrate:dev`, `pnpm gen:prisma` in `backend/`, and `pnpm install` in `frontend/`).
+
+```zsh
+brew install f1bonacc1/tap/process-compose   # or: go install github.com/F1bonacc1/process-compose@latest
+process-compose up                           # from the repo root
+```
+
 ## Task Description
 
 ### Bug: CSV country codes

@@ -39,6 +39,7 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
       valid: validLeads.length,
       invalid: invalidLeads.length,
       duplicatesInCsv: duplicatesInCsv.length,
+      withWarnings: csvData.filter((lead) => lead.warnings.length > 0).length,
     }
   }, [csvData])
 
@@ -100,6 +101,9 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
         jobTitle: lead.jobTitle || undefined,
         countryCode: lead.countryCode || undefined,
         companyName: lead.companyName || undefined,
+        phoneNumber: lead.phoneNumber || undefined,
+        yearsInRole: lead.yearsInRole || undefined,
+        linkedinUrl: lead.linkedinUrl || undefined,
       }))
 
       return api.leads.bulkImport({ leads: leadsToImport })
@@ -113,6 +117,9 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
       }
       if (data.invalidLeads > 0) {
         message += ` (${data.invalidLeads} invalid leads excluded)`
+      }
+      if (data.warnings.length > 0) {
+        message += ` (${data.warnings.length} with an invalid country code cleared)`
       }
 
       toast.success(message)
@@ -238,7 +245,7 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
                   </p>
                   <p className="text-sm text-gray-500">
                     CSV must include: firstName, lastName, email (required). Optional: jobTitle, countryCode,
-                    companyName
+                    companyName, phoneNumber, yearsInRole, linkedinUrl
                   </p>
                 </div>
               )}
@@ -247,7 +254,7 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
             <div className="space-y-4">
               <div className="bg-gray-50 rounded-lg p-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-3">Import Summary</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="bg-white rounded p-3 text-center">
                     <div className="text-lg font-semibold text-gray-900">{stats.total}</div>
                     <div className="text-xs text-gray-500">Total Rows</div>
@@ -263,6 +270,10 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
                   <div className="bg-white rounded p-3 text-center">
                     <div className="text-lg font-semibold text-yellow-600">{stats.duplicatesInCsv}</div>
                     <div className="text-xs text-gray-500">Duplicates in CSV</div>
+                  </div>
+                  <div className="bg-white rounded p-3 text-center">
+                    <div className="text-lg font-semibold text-amber-600">{stats.withWarnings}</div>
+                    <div className="text-xs text-gray-500">With Warnings</div>
                   </div>
                 </div>
               </div>
@@ -285,7 +296,19 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
                         Company
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        Phone
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        Years
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        LinkedIn
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                         Errors
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        Warnings
                       </th>
                     </tr>
                   </thead>
@@ -309,7 +332,13 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
                         </td>
                         <td className="px-3 py-2 text-sm text-gray-900">{lead.email || '-'}</td>
                         <td className="px-3 py-2 text-sm text-gray-900">{lead.companyName || '-'}</td>
+                        <td className="px-3 py-2 text-sm text-gray-900">{lead.phoneNumber || '-'}</td>
+                        <td className="px-3 py-2 text-sm text-gray-900">{lead.yearsInRole || '-'}</td>
+                        <td className="px-3 py-2 text-sm text-gray-900">{lead.linkedinUrl || '-'}</td>
                         <td className="px-3 py-2 text-sm text-red-600">{lead.errors.join(', ') || '-'}</td>
+                        <td className="px-3 py-2 text-sm text-amber-600">
+                          {lead.warnings.join(', ') || '-'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

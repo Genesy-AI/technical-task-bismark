@@ -7,14 +7,30 @@ export interface CsvLead {
   jobTitle?: string
   countryCode?: string
   companyName?: string
+  phoneNumber?: string
+  yearsInRole?: string
+  linkedinUrl?: string
   isValid: boolean
   errors: string[]
+  warnings: string[]
   rowIndex: number
 }
 
 export const isValidEmail = (email: string): boolean => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   return emailRegex.test(email)
+}
+
+export const isValidCountryCode = (countryCode: string): boolean => {
+  return /^[A-Za-z]{2}$/.test(countryCode)
+}
+
+export const isValidYearsInRole = (yearsInRole: string): boolean => {
+  return /^\d+$/.test(yearsInRole)
+}
+
+export const isValidLinkedinUrl = (linkedinUrl: string): boolean => {
+  return /^(https?:\/\/)?([\w-]+\.)?linkedin\.com\/.+$/i.test(linkedinUrl)
 }
 
 export const parseCsv = (content: string): CsvLead[] => {
@@ -73,6 +89,16 @@ export const parseCsv = (content: string): CsvLead[] => {
         case 'companyname':
           lead.companyName = trimmedValue || undefined
           break
+        case 'phonenumber':
+          lead.phoneNumber = trimmedValue || undefined
+          break
+        case 'yearsinrole':
+          lead.yearsInRole = trimmedValue || undefined
+          break
+        case 'linkedinurl':
+        case 'linkedin':
+          lead.linkedinUrl = trimmedValue || undefined
+          break
       }
     })
 
@@ -89,6 +115,26 @@ export const parseCsv = (content: string): CsvLead[] => {
       errors.push('Invalid email format')
     }
 
+    const warnings: string[] = []
+    if (lead.countryCode && !isValidCountryCode(lead.countryCode)) {
+      warnings.push(`Invalid country code "${lead.countryCode}" (expected a 2-letter code) — cleared`)
+      lead.countryCode = undefined
+    } else if (lead.countryCode) {
+      lead.countryCode = lead.countryCode.toUpperCase()
+    }
+
+    if (lead.yearsInRole && !isValidYearsInRole(lead.yearsInRole)) {
+      warnings.push(
+        `Invalid years in role "${lead.yearsInRole}" (expected a non-negative whole number) — cleared`
+      )
+      lead.yearsInRole = undefined
+    }
+
+    if (lead.linkedinUrl && !isValidLinkedinUrl(lead.linkedinUrl)) {
+      warnings.push(`Invalid LinkedIn URL "${lead.linkedinUrl}" — cleared`)
+      lead.linkedinUrl = undefined
+    }
+
     data.push({
       ...lead,
       firstName: lead.firstName || '',
@@ -96,6 +142,7 @@ export const parseCsv = (content: string): CsvLead[] => {
       email: lead.email || '',
       isValid: errors.length === 0,
       errors,
+      warnings,
     } as CsvLead)
   })
 

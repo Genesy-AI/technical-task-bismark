@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- generic mutation-options plumbing needs any for type erasure */
 import {
   DefaultError,
   QueryClient,
@@ -69,6 +70,11 @@ const apiMutationsOptions = (queryClient: QueryClient) =>
             countryCode: null,
             companyName: null,
             message: null,
+            emailVerified: null,
+            phoneNumber: null,
+            yearsInRole: null,
+            linkedinUrl: null,
+            phoneEnriched: null,
             ...input,
           }
           const newLeads: ApiOutput<typeof api.leads.getMany> = [...(previousValue ?? []), newLead]

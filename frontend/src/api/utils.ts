@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- ApiModule models "any API function shape" */
 import { AxiosResponse } from 'axios'
 import { axiosInstance } from '../utils/axios'
 
